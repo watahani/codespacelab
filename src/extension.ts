@@ -220,6 +220,7 @@ function getWebviewContent() {
 										});
 								})
 								.catch(function(error) {
+									console.error(error)
 									callback(null, 'Reading clipboard error.');
 								});
 						} else {
@@ -227,8 +228,7 @@ function getWebviewContent() {
 						}
 					};
 				};
-
-				clipboardUtils.readImage(function(data, error) {
+				document.getElementById('paste-image').addEventListener('click',clipboardUtils.readImage(function(data, error) {
 					Log("readImage")
 					if (error) {
 						Log(error);
@@ -240,7 +240,8 @@ function getWebviewContent() {
 							data: data,
 						});
 					}
-				});
+				}))
+
 			</script>
 		</body>
 	</html>
