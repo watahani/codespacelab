@@ -32,11 +32,11 @@ async function pasteImage(context: vscode.ExtensionContext, folderPath: string) 
 					const currentFolder = filepath.replace(new RegExp(filename + '$'), '');
 					const filenameWithoutExtension = filename.substring(0, filename.lastIndexOf('.'));
 					const outpath = path.join(currentFolder, filenameWithoutExtension + '/');
-
-					imagePath = await saveImageToFolder(image, outpath, fileNameAndAlt.filename + '.' + fileExtension);
-
+					
+					await saveImageToFolder(image, outpath, fileNameAndAlt.filename + '.' + fileExtension);
+					const relativePath = `./${filenameWithoutExtension}/${fileNameAndAlt.filename}.${fileExtension}`;
 					panel.dispose(); // Close the webview panel
-					insertImageToMarkdown(editor, imagePath, fileNameAndAlt.altText);
+					await insertImageToMarkdown(editor, relativePath, fileNameAndAlt.altText);
 
 				} else if (message.type === 'debug') {
 					console.log(`webview log: ${message.data}`);
@@ -45,6 +45,7 @@ async function pasteImage(context: vscode.ExtensionContext, folderPath: string) 
 			undefined,
 			context.subscriptions
 		);
+		
 
 
 	} catch (error: any) {
@@ -66,12 +67,15 @@ async function saveImageToFolder(image: sharp.Sharp, folderPath: string, imageNa
 	return imagePath;
 }
 
-function insertImageToMarkdown(editor: vscode.TextEditor, imagePath: string, altText: string) {
+async function insertImageToMarkdown(editor: vscode.TextEditor, imagePath: string, altText: string) {
 	if (editor) {
 		const imageMarkdown = `![${altText}](${imagePath})`;
-
-		editor.edit((editBuilder) => {
-			editBuilder.insert(editor.selection.active, imageMarkdown);
+		//reforcus editor
+		// Refocus the editor
+		vscode.window.showTextDocument(editor.document, { preview: false, viewColumn: editor.viewColumn }).then((focusedEditor) => {
+			focusedEditor.edit((editBuilder) => {
+				editBuilder.insert(focusedEditor.selection.active, imageMarkdown);
+			});
 		});
 	}
 }
@@ -143,93 +147,94 @@ function getWebviewContent() {
 			<button id="debug">debug</button>
 			<div id="debug-view"></div>
 			<script nonce="xyz">
-			    const  vscode = acquireVsCodeApi();
-				function Log(message) {
-					vscode.postMessage({
-						type: 'debug',
-						data: message,
-					});
-				}
-				Log("Web View opened");
-				document.getElementById("debug").onclick= () => { 
-					Log("debug on click");  
-					document.getElementById("debug-view").innerHTML = "debug on click";
-				}
-				// https://dirask.com/posts/JavaScript-read-image-from-clipboard-as-Data-URLs-encoded-with-Base64-10Wwaj
-				var clipboardUtils = new function() {
-					var permissions = {
-						'image/bmp': true,
-						'image/gif': true,
-						'image/png': true,
-						'image/jpeg': true,
-						'image/tiff': true
-					};
-				
-					function getType(types) {
-						for (var j = 0; j < types.length; ++j) {
-							var type = types[j];
-							if (permissions[type]) {
-								return type;
-							}
-						}
-						return null;
-					}
-					function getItem(items) {
-						for (var i = 0; i < items.length; ++i) {
-							var item = items[i];
-							if(item) {
-								var type = getType(item.types);
-								if(type) {
-									return item.getType(type);
-								}
-							}
-						}
-						return null;
-					}
-					function loadFile(file, callback) {
-						if (window.FileReader) {
-							var reader = new FileReader();
-							reader.onload = function() {
-								callback(reader.result, null);
-							};
-							reader.onerror = function() {
-								callback(null, 'Incorrect file.');
-							};
-							reader.readAsDataURL(file);
-						} else {
-							callback(null, 'File api is not supported.');
-						}
-					}
-					Log("dev")
-					this.readImage = function(callback) {
-						if (navigator.clipboard) {
-							var promise = navigator.clipboard.read();
-							promise
-								.then(function(items) {
-									var promise = getItem(items);
-									if (promise == null) {
-										callback(null, null);
-										return;
-									}
-									promise
-										.then(function(result) {
-											loadFile(result, callback);
-										})
-										.catch(function(error) {
-											callback(null, 'Reading clipboard error.');
-										});
-								})
-								.catch(function(error) {
-									console.error(error)
-									callback(null, 'Reading clipboard error.');
-								});
-						} else {
-							callback(null, 'Clipboard is not supported.');
-						}
-					};
+			const  vscode = acquireVsCodeApi();
+			function Log(message) {
+				vscode.postMessage({
+					type: 'debug',
+					data: message,
+				});
+			}
+			Log("Web View opened");
+			document.getElementById("debug").onclick= () => { 
+				Log("debug on click");  
+				document.getElementById("debug-view").innerHTML = "debug on click1";
+			}
+			// https://dirask.com/posts/JavaScript-read-image-from-clipboard-as-Data-URLs-encoded-with-Base64-10Wwaj
+			var clipboardUtils = new function() {
+				var permissions = {
+					'image/bmp': true,
+					'image/gif': true,
+					'image/png': true,
+					'image/jpeg': true,
+					'image/tiff': true
 				};
-				document.getElementById('paste-image').addEventListener('click',clipboardUtils.readImage(function(data, error) {
-					Log("readImage")
+			
+				function getType(types) {
+					for (var j = 0; j < types.length; ++j) {
+						var type = types[j];
+						if (permissions[type]) {
+							return type;
+						}
+					}
+					return null;
+				}
+				function getItem(items) {
+					for (var i = 0; i < items.length; ++i) {
+						var item = items[i];
+						if(item) {
+							var type = getType(item.types);
+							if(type) {
+								return item.getType(type);
+							}
+						}
+					}
+					return null;
+				}
+				function loadFile(file, callback) {
+					if (window.FileReader) {
+						var reader = new FileReader();
+						reader.onload = function() {
+							callback(reader.result, null);
+						};
+						reader.onerror = function() {
+							callback(null, 'Incorrect file.');
+						};
+						reader.readAsDataURL(file);
+					} else {
+						callback(null, 'File api is not supported.');
+					}
+				}
+				Log("dev")
+				this.readImage = function(callback) {
+					if (navigator.clipboard) {
+						var promise = navigator.clipboard.read();
+						promise
+							.then(function(items) {
+								var promise = getItem(items);
+								if (promise == null) {
+									callback(null, null);
+									return;
+								}
+								promise
+									.then(function(result) {
+										loadFile(result, callback);
+									})
+									.catch(function(error) {
+										callback(null, 'Reading clipboard error.');
+									});
+							})
+							.catch(function(error) {
+								console.error(error)
+								callback(null, 'Reading clipboard error.');
+							});
+					} else {
+						callback(null, 'Clipboard is not supported.');
+					}
+				};
+			};
+			document.getElementById('paste-image').addEventListener('click',  () => {
+				clipboardUtils.readImage(function(data, error) {
+					Log("readImage");
 					if (error) {
 						Log(error);
 						return;
@@ -240,8 +245,8 @@ function getWebviewContent() {
 							data: data,
 						});
 					}
-				}))
-
+				});
+			});			
 			</script>
 		</body>
 	</html>
