@@ -4,27 +4,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; script-src 'nonce-xyz';" />
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; img-src data:; script-src 'nonce-xyz'; style-src 'nonce-xyz'" />
     <title>My Webview</title>
+    <style nonce="xyz">
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            font-family: sans-serif;
+        }
+
+        #permission-message {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background-color: yellow;
+            text-align: center;
+            padding: 10px 0;
+        }
+
+        #paste-image {
+            padding: 20px 40px;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        #debug {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            height: 25%;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 20px;
+            overflow-y: scroll;
+        }
+
+        #debug-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
 </head>
 
 <body>
+    <div id="permission-message">Please allow access to the clipboard. ⬆️</div>
+
     <button id="paste-image">Paste Image</button>
-    <button id="debug">debug</button>
+    <button id="debug-btn" onclick="toggleDebug()">Debug</button>
     <div id="debug-view"></div>
     <script nonce="xyz">
         const vscode = acquireVsCodeApi();
-        function Log(message) {
+        function sendDebug(message) {
             vscode.postMessage({
                 type: 'debug',
+                data: `${message}`,
+            });
+        }
+        function showError(message) {
+            vscode.postMessage({
+                type: 'error',
                 data: message,
             });
         }
-        Log("Web View opened");
-        document.getElementById("debug").onclick = () => {
-            Log("debug on click");
-            document.getElementById("debug-view").innerHTML = "debug on click1";
+        function toggleDebug() {
+            const debugElement = document.getElementById('debug');
+            debugElement.style.display = debugElement.style.display === 'none' ? 'block' : 'none';
         }
+
+        function debugOutput(message) {
+            sendDebug(message);
+            const debugElement = document.getElementById('debug');
+            const now = new Date();
+            const timestamp = now.toISOString();
+            debugElement.innerHTML += `${timestamp} - ${message}<br>`;
+        }
+
+        debugOutput("Web View opened");
+
         // https://dirask.com/posts/JavaScript-read-image-from-clipboard-as-Data-URLs-encoded-with-Base64-10Wwaj
         var clipboardUtils = new function () {
             var permissions = {
@@ -70,7 +136,6 @@
                     callback(null, 'File api is not supported.');
                 }
             }
-            Log("dev")
             this.readImage = function (callback) {
                 if (navigator.clipboard) {
                     var promise = navigator.clipboard.read();
@@ -78,6 +143,7 @@
                         .then(function (items) {
                             var promise = getItem(items);
                             if (promise == null) {
+                                debugOutput("clipboard is empty or does not contains image");
                                 callback(null, null);
                                 return;
                             }
@@ -86,23 +152,25 @@
                                     loadFile(result, callback);
                                 })
                                 .catch(function (error) {
+                                    showError('Reading clipboard error on WebView.' + error.message)
                                     callback(null, 'Reading clipboard error.');
                                 });
                         })
                         .catch(function (error) {
-                            console.error(error)
+                            showError('Reading clipboard error on WebView.' + error.message)
                             callback(null, 'Reading clipboard error.');
                         });
                 } else {
+                    showError('Clipboard is not supported on WebView')
                     callback(null, 'Clipboard is not supported.');
                 }
             };
         };
         document.getElementById('paste-image').addEventListener('click', () => {
             clipboardUtils.readImage(function (data, error) {
-                Log("readImage");
+                debugOutput("readImage");
                 if (error) {
-                    Log(error);
+                    debugOutput(error);
                     return;
                 }
                 if (data) {
@@ -112,7 +180,7 @@
                     });
                 }
             });
-        });			
+        });
     </script>
 </body>
 
