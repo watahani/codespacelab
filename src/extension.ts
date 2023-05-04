@@ -72,10 +72,9 @@ async function insertImageToMarkdown(editor: vscode.TextEditor, imagePath: strin
 		const imageMarkdown = `![${altText}](${imagePath})`;
 		//reforcus editor
 		// Refocus the editor
-		vscode.window.showTextDocument(editor.document, { preview: false, viewColumn: editor.viewColumn }).then((focusedEditor) => {
-			focusedEditor.edit((editBuilder) => {
-				editBuilder.insert(focusedEditor.selection.active, imageMarkdown);
-			});
+		const focusedEditor = await vscode.window.showTextDocument(editor.document, { preview: false, viewColumn: editor.viewColumn })
+		focusedEditor.edit((editBuilder) => {
+			editBuilder.insert(focusedEditor.selection.active, imageMarkdown);
 		});
 	}
 }
