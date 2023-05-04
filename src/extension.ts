@@ -3,7 +3,19 @@
 import path = require('path');
 import * as vscode from 'vscode';
 import * as sharp from 'sharp';
-import { fstat } from 'fs';
+import * as fs from 'fs';
+import * as crypto from 'crypto';
+
+function log(message: string) {
+	//utc timestapmp
+	const timestamp = new Date().toISOString();
+	console.log(`${timestamp} - [markdown-paste-image]${message}`);
+}
+
+function err(message: string) {
+	const timestamp = new Date().toISOString();
+	console.error(`${timestamp} - [markdown-paste-image]${message}`);
+}
 
 async function pasteImage(context: vscode.ExtensionContext, folderPath: string) {
 
@@ -14,10 +26,11 @@ async function pasteImage(context: vscode.ExtensionContext, folderPath: string) 
 			return;
 		}
 		const fileNameAndAlt = await askFileName();
+		if (fileNameAndAlt === null) { return; }
 		//get relative path
-		const filepath = editor.document.uri.fsPath;
+		const mdPath = editor.document.uri.fsPath;
 
-		const panel = createImagePastePanel();
+		const panel = await createImagePastePanel();
 		let fileExtension: string;
 		let imagePath: string;
 		await panel.webview.onDidReceiveMessage(
@@ -28,43 +41,46 @@ async function pasteImage(context: vscode.ExtensionContext, folderPath: string) 
 					const buffer = Buffer.from(base64data, 'base64');
 					const image = sharp(buffer);
 
-					const filename = filepath.substring(filepath.lastIndexOf('/') + 1, filepath.length);
-					const currentFolder = filepath.replace(new RegExp(filename + '$'), '');
-					const filenameWithoutExtension = filename.substring(0, filename.lastIndexOf('.'));
-					const outpath = path.join(currentFolder, filenameWithoutExtension + '/');
-					
+					const mdName = mdPath.substring(mdPath.lastIndexOf('/') + 1, mdPath.length);
+					const currentFolder = mdPath.replace(new RegExp(mdName + '$'), '');
+					const mdNameWithoutExtension = mdName.substring(0, mdName.lastIndexOf('.'));
+					const outpath = path.join(currentFolder, mdNameWithoutExtension + '/');
+
 					await saveImageToFolder(image, outpath, fileNameAndAlt.filename + '.' + fileExtension);
-					const relativePath = `./${filenameWithoutExtension}/${fileNameAndAlt.filename}.${fileExtension}`;
+					const relativePath = `./${mdNameWithoutExtension}/${fileNameAndAlt.filename}.${fileExtension}`;
 					panel.dispose(); // Close the webview panel
 					await insertImageToMarkdown(editor, relativePath, fileNameAndAlt.altText);
 
 				} else if (message.type === 'debug') {
-					console.log(`webview log: ${message.data}`);
+					log(`[webview] ${message.data}`);
+				} else if (message.type === 'error') {
+					err(`[webview] ${message.data}`);
+					vscode.window.showErrorMessage(message.data);
 				}
 			},
 			undefined,
 			context.subscriptions
 		);
-		
-
-
 	} catch (error: any) {
+		err(error.message);
 		vscode.window.showErrorMessage(`Error: ${error.message}`);
 	}
 }
+
 
 async function saveImageToFolder(image: sharp.Sharp, folderPath: string, imageName: string) {
 	//if folder not exist create it
 	try {
 		await vscode.workspace.fs.stat(vscode.Uri.file(folderPath));
 	} catch (error) {
-		//create folder
+		//create 
+		log(`Creating folder ${folderPath}`);
 		await vscode.workspace.fs.createDirectory(vscode.Uri.file(folderPath));
 	}
 	const imagePath = path.join(folderPath, imageName);
 	await image.toFile(imagePath);
 
-	return imagePath;
+	return;
 }
 
 async function insertImageToMarkdown(editor: vscode.TextEditor, imagePath: string, altText: string) {
@@ -76,6 +92,8 @@ async function insertImageToMarkdown(editor: vscode.TextEditor, imagePath: strin
 		focusedEditor.edit((editBuilder) => {
 			editBuilder.insert(focusedEditor.selection.active, imageMarkdown);
 		});
+	} else {
+		vscode.window.showErrorMessage('No active editor found');
 	}
 }
 
@@ -84,9 +102,9 @@ async function insertImageToMarkdown(editor: vscode.TextEditor, imagePath: strin
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
+	// Use the console to output diagnostic information (log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "markdown-paste-image" is now active!');
+	log('Congratulations, your extension "markdown-paste-image" is now active!');
 
 	// The command has been defined in the package.json file
 	// Now provide the implementation of the command with registerCommand
@@ -115,7 +133,7 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 }
 
-function createImagePastePanel() {
+async function createImagePastePanel() {
 	const panel = vscode.window.createWebviewPanel(
 		'imagePaste',
 		'Paste Image',
@@ -124,143 +142,44 @@ function createImagePastePanel() {
 			enableScripts: true,
 		}
 	);
-
-	panel.webview.html = getWebviewContent();
+	const nonce = getBase64Nonce();
+	const html = (await getWebviewContent());//.replace(/\$\{nonce\}/g, nonce);;
+	panel.webview.html = html;
 	return panel;
+}
+
+function getBase64Nonce() {
+	const nonce = new Uint8Array(32);
+	crypto.randomFillSync(nonce);
+	return Buffer.from(nonce).toString('base64');
 }
 
 
 function getWebviewContent() {
-	return `
-	<!DOCTYPE html>
-	<html lang="en">
-	<head>
-		<meta charset="UTF-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; script-src 'nonce-xyz';"
-/>
-		<title>My Webview</title>
-	</head>
-		<body>
-			<button id="paste-image">Paste Image</button>
-			<button id="debug">debug</button>
-			<div id="debug-view"></div>
-			<script nonce="xyz">
-			const  vscode = acquireVsCodeApi();
-			function Log(message) {
-				vscode.postMessage({
-					type: 'debug',
-					data: message,
-				});
-			}
-			Log("Web View opened");
-			document.getElementById("debug").onclick= () => { 
-				Log("debug on click");  
-				document.getElementById("debug-view").innerHTML = "debug on click1";
-			}
-			// https://dirask.com/posts/JavaScript-read-image-from-clipboard-as-Data-URLs-encoded-with-Base64-10Wwaj
-			var clipboardUtils = new function() {
-				var permissions = {
-					'image/bmp': true,
-					'image/gif': true,
-					'image/png': true,
-					'image/jpeg': true,
-					'image/tiff': true
-				};
-			
-				function getType(types) {
-					for (var j = 0; j < types.length; ++j) {
-						var type = types[j];
-						if (permissions[type]) {
-							return type;
-						}
-					}
-					return null;
-				}
-				function getItem(items) {
-					for (var i = 0; i < items.length; ++i) {
-						var item = items[i];
-						if(item) {
-							var type = getType(item.types);
-							if(type) {
-								return item.getType(type);
-							}
-						}
-					}
-					return null;
-				}
-				function loadFile(file, callback) {
-					if (window.FileReader) {
-						var reader = new FileReader();
-						reader.onload = function() {
-							callback(reader.result, null);
-						};
-						reader.onerror = function() {
-							callback(null, 'Incorrect file.');
-						};
-						reader.readAsDataURL(file);
-					} else {
-						callback(null, 'File api is not supported.');
-					}
-				}
-				Log("dev")
-				this.readImage = function(callback) {
-					if (navigator.clipboard) {
-						var promise = navigator.clipboard.read();
-						promise
-							.then(function(items) {
-								var promise = getItem(items);
-								if (promise == null) {
-									callback(null, null);
-									return;
-								}
-								promise
-									.then(function(result) {
-										loadFile(result, callback);
-									})
-									.catch(function(error) {
-										callback(null, 'Reading clipboard error.');
-									});
-							})
-							.catch(function(error) {
-								console.error(error)
-								callback(null, 'Reading clipboard error.');
-							});
-					} else {
-						callback(null, 'Clipboard is not supported.');
-					}
-				};
-			};
-			document.getElementById('paste-image').addEventListener('click',  () => {
-				clipboardUtils.readImage(function(data, error) {
-					Log("readImage");
-					if (error) {
-						Log(error);
-						return;
-					}
-					if (data) {
-						vscode.postMessage({
-							type: 'image',
-							data: data,
-						});
-					}
-				});
-			});			
-			</script>
-		</body>
-	</html>
-	`;
+	const filePath = path.join(__dirname, 'webview.html');
+	return fs.promises.readFile(filePath, 'utf8');
 }
 
 
-async function askFileName(): Promise<{ filename: string, altText: string }> {
-	const filename = await vscode.window.showInputBox({
-		prompt: 'enter file name'
+async function askFileName(): Promise<{ filename: string, altText: string } | null> {
+	const inputFileName = await vscode.window.showInputBox({
+		prompt: 'enter file name',
+		placeHolder: 'image'
 	});
 
-	const altText = await vscode.window.showInputBox({
+	if (null === inputFileName) {
+		return null;
+	}
+
+	let inputAltText = await vscode.window.showInputBox({
 		prompt: 'enter alt text'
 	});
-	if (!filename || !altText) { throw new Error('filename or altText is empty'); }
-	return { filename: filename, altText: altText };
+
+	if (null === inputAltText || undefined === inputAltText) {
+		return null;
+	}
+
+	const filename = inputFileName === '' ? inputFileName : 'image';
+
+	return { filename: filename, altText: inputAltText };
 }

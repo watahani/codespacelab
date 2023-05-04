@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; script-src 'nonce-xyz';" />
+    <title>My Webview</title>
+</head>
+
+<body>
+    <button id="paste-image">Paste Image</button>
+    <button id="debug">debug</button>
+    <div id="debug-view"></div>
+    <script nonce="xyz">
+        const vscode = acquireVsCodeApi();
+        function Log(message) {
+            vscode.postMessage({
+                type: 'debug',
+                data: message,
+            });
+        }
+        Log("Web View opened");
+        document.getElementById("debug").onclick = () => {
+            Log("debug on click");
+            document.getElementById("debug-view").innerHTML = "debug on click1";
+        }
+        // https://dirask.com/posts/JavaScript-read-image-from-clipboard-as-Data-URLs-encoded-with-Base64-10Wwaj
+        var clipboardUtils = new function () {
+            var permissions = {
+                'image/bmp': true,
+                'image/gif': true,
+                'image/png': true,
+                'image/jpeg': true,
+                'image/tiff': true
+            };
+
+            function getType(types) {
+                for (var j = 0; j < types.length; ++j) {
+                    var type = types[j];
+                    if (permissions[type]) {
+                        return type;
+                    }
+                }
+                return null;
+            }
+            function getItem(items) {
+                for (var i = 0; i < items.length; ++i) {
+                    var item = items[i];
+                    if (item) {
+                        var type = getType(item.types);
+                        if (type) {
+                            return item.getType(type);
+                        }
+                    }
+                }
+                return null;
+            }
+            function loadFile(file, callback) {
+                if (window.FileReader) {
+                    var reader = new FileReader();
+                    reader.onload = function () {
+                        callback(reader.result, null);
+                    };
+                    reader.onerror = function () {
+                        callback(null, 'Incorrect file.');
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    callback(null, 'File api is not supported.');
+                }
+            }
+            Log("dev")
+            this.readImage = function (callback) {
+                if (navigator.clipboard) {
+                    var promise = navigator.clipboard.read();
+                    promise
+                        .then(function (items) {
+                            var promise = getItem(items);
+                            if (promise == null) {
+                                callback(null, null);
+                                return;
+                            }
+                            promise
+                                .then(function (result) {
+                                    loadFile(result, callback);
+                                })
+                                .catch(function (error) {
+                                    callback(null, 'Reading clipboard error.');
+                                });
+                        })
+                        .catch(function (error) {
+                            console.error(error)
+                            callback(null, 'Reading clipboard error.');
+                        });
+                } else {
+                    callback(null, 'Clipboard is not supported.');
+                }
+            };
+        };
+        document.getElementById('paste-image').addEventListener('click', () => {
+            clipboardUtils.readImage(function (data, error) {
+                Log("readImage");
+                if (error) {
+                    Log(error);
+                    return;
+                }
+                if (data) {
+                    vscode.postMessage({
+                        type: 'image',
+                        data: data,
+                    });
+                }
+            });
+        });			
+    </script>
+</body>
+
+</html>
