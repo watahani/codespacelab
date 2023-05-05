@@ -17,6 +17,11 @@ function err(message: string) {
 	console.error(`${timestamp} - [markdown-paste-image]${message}`);
 }
 
+function checkMessageIsImage(message: string) {
+	const regex = /^data:image\/\w+;base64,/;
+	return regex.test(message);
+}
+
 async function pasteImage(context: vscode.ExtensionContext, folderPath: string) {
 
 	try {
@@ -36,6 +41,10 @@ async function pasteImage(context: vscode.ExtensionContext, folderPath: string) 
 		await panel.webview.onDidReceiveMessage(
 			async (message) => {
 				if (message.type === 'image') {
+					if (checkMessageIsImage(message.data) === false) {
+						vscode.window.showErrorMessage('Not an image in clipboard');
+						panel.dispose();
+					}
 					const base64data = message.data.replace(/^data:image\/\w+;base64,/, '');
 					fileExtension = message.data.substring(message.data.indexOf('/') + 1, message.data.indexOf(';'));
 					const buffer = Buffer.from(base64data, 'base64');
