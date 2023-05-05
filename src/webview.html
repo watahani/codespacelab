@@ -145,6 +145,7 @@
                             var promise = getItem(items);
                             if (promise == null) {
                                 debugOutput("clipboard is empty or does not contains image");
+                                showError("clipboard is empty or does not contains image")
                                 callback(null, null);
                                 return;
                             }
