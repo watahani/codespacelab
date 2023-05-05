@@ -56,6 +56,7 @@ async function pasteImage(context: vscode.ExtensionContext, folderPath: string) 
 				} else if (message.type === 'error') {
 					err(`[webview] ${message.data}`);
 					vscode.window.showErrorMessage(message.data);
+					panel.dispose();
 				}
 			},
 			undefined,
