@@ -25,6 +25,7 @@
             background-color: yellow;
             text-align: center;
             padding: 10px 0;
+            color: orange;
         }
 
         #paste-image {
@@ -57,11 +58,11 @@
 </head>
 
 <body>
-    <div id="permission-message">Please allow access to the clipboard. ⬆️</div>
+    <div id="permission-message">Please allow access to the clipboard. ⬆️ <br/>Please click paste button ⬇️.</div>
 
     <button id="paste-image">Paste Image</button>
     <button id="debug-btn" onclick="toggleDebug()">Debug</button>
-    <div id="debug-view"></div>
+    <div id="debug"></div>
     <script nonce="xyz">
         const vscode = acquireVsCodeApi();
         function sendDebug(message) {
